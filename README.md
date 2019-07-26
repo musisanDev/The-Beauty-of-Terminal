@@ -2,4 +2,4 @@
 ![AUTHOR](https://img.shields.io/badge/Author-musisan-green)
 ![LICENSE](https://img.shields.io/badge/LICENSE-PUBLIC-orange)
 
-The beauty of the terminal is worth everyone to feel
+> The beauty of the terminal is worth everyone to feel.
