@@ -1,0 +1,16 @@
+[Unit]
+Description=Redis Server
+After=network.target
+Documentation=https://redis.io/documentation
+
+[Service]
+Type=forking
+User=redis
+Group=redis
+Environment="OPTIONS=/usr/local/redis/%i/conf/redis.conf"
+ExecStart=/usr/local/redis/bin/redis-server $OPTIONS
+ExecStop=/usr/local/redis/bin/redis-cli -p %i shutdown
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
