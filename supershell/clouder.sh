@@ -44,12 +44,22 @@ function remove::hostapp(){
 
 # stop & disable rpcbind
 function remove::service(){
-    systemctl stop rpcbind.service
-    systemctl disable rpcbind.service
-    systemctl mask rpcbind.service
-    systemctl stop rpcbind.socket
-    systemctl disable rpcbind.socket
-    systemctl mask rpcbind.socket
+    {
+        systemctl stop rpcbind.service
+        systemctl disable rpcbind.service
+        systemctl mask rpcbind.service
+        systemctl stop rpcbind.socket
+        systemctl disable rpcbind.socket
+        systemctl mask rpcbind.socket
+    } &> /dev/null
+    {
+        systemctl stop aliyun
+        systemctl disable aliyun
+        rm -rf /usr/sbin/aliyun-*
+        rm -rf /etc/systemd/system/aliyun.service
+        rm -rf /usr/local/share/aliyun-assist/
+    } &> /dev/null
+    return 0
 }
 
 # update tsinghua mirrors
@@ -88,20 +98,36 @@ cat >> ${HOME}/.bashrc <<'EOF'
 EOF
 }
 
+function new::iptables(){
+    systemctl stop firewalld
+    systemctl disable firewalld
+    yum -y update
+    yum -y install iptables-services
+    systemctl enable iptables.service
+    systemctl start iptables.service
+    {
+        iptables -P INPUT ACCEPT
+        iptables -Z
+        iptables -I INPUT 3 -i lo -j ACCEPT
+        servivce iptables save
+    }
+}
+
 # result color
 function color::result(){
     echo -e "\e[32m✔   " $1 "\e[m"
 }
 
 function main(){
-    config::hostname && color::result "Config Hostname"
-    config::sshd && color::result "Config Sshd"
-    new::sshkey && color::result "New Sshkey"
-    remove::hostapp && color::result "Remove hostapp"
-    #remove::service  && color::result "Remove hostapp & service of Baidu Cloud"
-    config::repo  && color::result "Config Repo"
-    append::rc  && color::result "Append Rc"
-    new::goenv  && color::result "New GO env"
+    config::hostname && color::result "Config Hostname Done."
+    config::sshd && color::result "Config Sshd Done."
+    new::sshkey && color::result "New Sshkey Done."
+    remove::hostapp && color::result "Remove hostapp Done."
+    remove::service  && color::result "Remove service of Baidu/Aliyun Cloud Done."
+    config::repo  && color::result "Config Repo Done."
+    append::rc  && color::result "Append Rc Done."
+    new::goenv  && color::result "New GO env Done."
+    new::iptables && color::result "Firewall Done."
 }
 
 main "$@"
