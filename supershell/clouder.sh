@@ -108,8 +108,8 @@ function new::iptables(){
     {
         iptables -P INPUT ACCEPT
         iptables -Z
-        iptables -I INPUT 3 -i lo -j ACCEPT
-        servivce iptables save
+        iptables -R INPUT -m state --state NEW -p tcp --dport ${SP} -j ACCEPT
+        service iptables save
     }
 }
 
