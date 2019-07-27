@@ -59,7 +59,7 @@ function remove::service(){
         rm -rf /etc/systemd/system/aliyun.service
         rm -rf /usr/local/share/aliyun-assist/
     } &> /dev/null
-    return 0
+    echo > /etc/motd && return 0
 }
 
 # update tsinghua mirrors
@@ -109,6 +109,7 @@ function new::iptables(){
         iptables -P INPUT ACCEPT
         iptables -Z
         iptables -R INPUT -m state --state NEW -p tcp --dport ${SP} -j ACCEPT
+        iptables -D INPUT 5
         service iptables save
     }
 }
