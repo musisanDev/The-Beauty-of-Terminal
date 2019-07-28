@@ -1,0 +1,18 @@
+[Unit]
+Description=MongoDB Database Server
+After=network.target
+Documentation=https://docs.mongodb.org/manual
+
+[Service]
+Type=forking
+User=mongod
+Group=mongod
+LimitNOFILE=64000
+LimitNPROC=64000
+Environment="OPTIONS=-f /apps/mongodb/%i/conf/mongod.yml"
+PIDFile=/apps/mongodb/%i/log/mongod.pid
+ExecStart=/apps/mongodb/bin/mongod $OPTIONS
+ExecStop=/apps/mongodb/bin/mongod --shutdown $OPTIONS
+
+[Install]
+WantedBy=multi-user.target

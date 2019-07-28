@@ -1,0 +1,18 @@
+[Unit]
+Description=Minio Storage
+After=network.target local-fs.target
+
+[Service]
+Type=simple
+User=minio
+LimitNOFILE=1048576
+LimitCORE=infinity
+ExecStart=/apps/minio/minio server /apps/minio/data
+ExecStop=/bin/kill -9 $MAINPID
+TimeoutStopSec=300
+Restart=on-failure
+RestartPreventExitStatus=1
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

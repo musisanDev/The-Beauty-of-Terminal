@@ -1,11 +1,15 @@
 #!/bin/bash
 . /etc/init.d/functions
 shopt -s extglob
+stty erase ^H
 
-trap "Something get wrong!" ERR
+read -p $'Which directory do you want to create as an application directory?\n' APPDIR
+: ${APPDIR:="/silis"}
+
+
 
 # change hostname & write into hosts
-function config::hostname(){
+config::hostname(){
     read -p $'Enter new hostname: \n' HN
     /usr/bin/hostnamectl set-hostname ${HN}
     local innerIp=$(hostname -I)
@@ -13,7 +17,7 @@ function config::hostname(){
 }
 
 # change ssh port & banned root login with password
-function config::sshd(){
+config::sshd(){
     local sshConfig=/etc/ssh/sshd_config
     read -p $'Enter new port: \n' SP
     sed -i "/22/aPort ${SP}" ${sshConfig}
@@ -22,13 +26,13 @@ function config::sshd(){
 }
 
 # generate ssh key for login into server
-function new::sshkey(){
+new::sshkey(){
     local outFile=/root/.ssh/id_rsa
     /usr/bin/ssh-keygen -t rsa -b 4096 -N '' -f ${outFile}
 }
 
 # delete hosteye & bcm-agent
-function remove::hostapp(){
+remove::hostapp(){
     service hosteye stop
     service bcm-agent stop
     service aegis stop
@@ -43,7 +47,7 @@ function remove::hostapp(){
 }
 
 # stop & disable rpcbind
-function remove::service(){
+remove::service(){
     {
         systemctl stop rpcbind.service
         systemctl disable rpcbind.service
@@ -63,7 +67,7 @@ function remove::service(){
 }
 
 # update tsinghua mirrors
-function config::repo(){
+config::repo(){
     baseRepo=/etc/yum.repos.d/CentOS-Base.repo
     cd `echo ${baseRepo%C*}` \
         && action "remove origin base.repo" rm -f !(CentOS-Base.repo|epel.repo) \
@@ -77,7 +81,7 @@ function config::repo(){
 }
 
 # written .vimrc & .bashrc
-function append::rc(){
+append::rc(){
     vimStr="set nocompatible\nset backspace=2\nset nu\nset encoding=utf-8\nset ts=4\nset sw=4\nset smarttab\nset ai\nset si\nset hlsearch\nset incsearch\nset expandtab\nsyntax on\nautocmd FileType yaml setlocal ai ts=2 sw=2 expandtab\nfiletype plugin indent on"
     echo -e ${vimStr} > ${HOME}/.vimrc
 cat >> ${HOME}/.bashrc <<'EOF'
@@ -86,7 +90,7 @@ EOF
 }
 
 # go env
-function new::goenv(){
+new::goenv(){
     goFile=go1.12.7.linux-amd64.tar.gz
     if wget https://studygolang.com/dl/golang/${goFile};then
         tar zxf ${goFile} -C . && rm -f ${goFile} && mv go /usr/local/golang &>/dev/null
@@ -98,7 +102,11 @@ cat >> ${HOME}/.bashrc <<'EOF'
 EOF
 }
 
-function new::iptables(){
+pre::package(){
+    yum -y install net-snmp sendmail openssl-dev gcc tmux lsof lrzsz yum-utils
+}
+
+new::iptables(){
     systemctl stop firewalld
     systemctl disable firewalld
     yum -y update
@@ -114,21 +122,119 @@ function new::iptables(){
     }
 }
 
+new::mysql(){
+    repoRPM='mysql57-community-release-el7-10.noarch.rpm'
+    wget https://repo.mysql.com/yum/mysql-5.7-community/el/7/x86_64/${repoRPM}
+    rpm -ivh ${repoRPM} 
+    yum -y install mysql mysql-server
+}
+
+new::nginx(){
+    xxx
+    yum install nginx -y
+}
+
+new::prometheus(){
+    prometheusTar='prometheus-2.11.1.linux-amd64.tar.gz'
+    mkdir -p ${APPDIR}/prometheus/data
+    useradd -r -d ${APPDIR}/prometheus -c "Prometheus Server" -s /sbin/nologin prometheus
+    wget https://github.com/prometheus/prometheus/releases/download/v2.11.1/${prometheusTar}
+    tar zxvf ${prometheusTar} && \
+        mv ${prometheusTar%.tar.gz}/* ${APPDIR}/prometheus \
+        rm -rf ${prometheusTar%.tar.gz}
+    chown -R prometheus:prometheus ${APPDIR}/prometheus
+    # 下载service文件然后替换
+    ( cd /usr/lib/systemd/system/ && \
+        ----------------------------------------------- && \
+        sed -i "/apps/s/apps/${APPDIR}/g" prometheus.service && \
+        systemctl daemon-reload && systemctl enable prometheus.service )
+}
+
+new::alertmanager(){
+    amTar='alertmanager-0.18.0.linux-amd64.tar.gz'
+    mkdir -p ${APPDIR}/alertmanager/data
+    useradd -r -d ${APPDIR}/alertmanager -c "Alert Server" -s /sbin/nologin alertmanager
+    wget https://github.com/prometheus/alertmanager/releases/download/v0.18.0/${amTar}
+    tar zxvf ${amTar} && \
+        mv ${amTar%.tar.gz}/* ${APPDIR}/alertmanager \
+        rm -rf ${amTar%.tar.gz}
+    chown -R alertmanager:alertmanager ${APPDIR}/alertmanager
+    # 需要替换
+    ( cd /usr/lib/systemd/system/ && \
+        ----------------------------------------------- && \
+        sed -i "/apps/s/apps/${APPDIR}/g" alertmanager.service && \
+        systemctl daemon-reload && systemctl enable alertmanager.service )
+}
+
+new::node(){
+    nodeTar='node_exporter-0.18.1.linux-amd64.tar.gz'
+    mkdir -p ${APPDIR}/node_exporter
+    useradd -r -d ${APPDIR}/node_exporter -c "Node Check Server" -s /sbin/nologin nodeexporter
+    wget https://github.com/prometheus/node_exporter/releases/download/v0.18.1/$nodeTar
+    tar zxvf ${nodeTar} && \
+        mv ${nodeTar%.tar.gz}/* ${APPDIR}/node_exporter \
+        rm -rf ${nodeTar%.tar.gz}
+    chown -R nodeexporter:nodeexporter ${APPDIR}/nodeexporter
+    # 需要替换
+    ( cd /usr/lib/systemd/system/ && \
+        ----------------------------------------------- && \
+        sed -i "/apps/s/apps/${APPDIR}/g" node_exporter.service && \
+        systemctl daemon-reload && systemctl enable node_exporter.service )
+}
+
+new::redis(){
+    redisTar='redis-4.0.14.tar.gz'
+    useradd -r -d ${APPDIR}/redis -c "Redis Server" -s /sbin/nologin redis
+    mkdir -p ${APPDIR}/redis/6379/{log,conf,data,var}
+    wget http://download.redis.io/releases/redis-4.0.14.tar.gz
+    tar zxvf $redisTar
+    ( cd ${redisTar%.tar.gz} && make PREFIX=${APPDIR}/redis install )
+    # 需要下载配置文件
+    ---------
+    ( cd ${APPDIR}/redis/6379/conf && \
+        sed -i "/apps/s/apps/${APPDIR}/g" redis.conf )
+    chown -R redis:redis ${APPDIR}/redis
+    # 需要下载systemd文件
+    ( cd /usr/lib/systemd/system/ && \
+        ----------------------------------------------- && \
+        sed -i "/apps/s/apps/${APPDIR}/g" redis@.service && \
+        systemctl daemon-reload && systemctl enable redis@6379.service )
+}
+
+new::mongod(){
+    mongoTar='mongodb-linux-x86_64-rhel70-4.0.11.tgz'
+    useradd -r -d ${APPDIR}/mongodb -c "Mongodb Server" -s /sbin/nologin mongodb
+    mkdir -p ${APPDIR}/mongodb/27017/{conf,data,log}
+    wget https://fastdl.mongodb.org/linux/${mongoTar}
+    tar zxvf ${mongoTar} && mv ${mongoTar%.tar.gz}/bin ${APPDIR}/mongodb
+    # 下载mongod。yml文件然后修改apps，和上面的redis一样，要改目录
+    ----------------
+    ( cd ${APPDIR}/mongodb/27017/conf && \
+        sed -i "/apps/s/apps/${APPDIR}/g" mongod.yml )
+    chown -R mongod:mongod ${APPDIR}/mongodb
+    # 下载systemd文件
+    ( cd /usr/lib/systemd/system/ && \
+        ----------------------------------------------- && \
+        sed -i "/apps/s/apps/${APPDIR}/g" mongod@.service && \
+        systemctl daemon-reload && systemctl enable mongod@27017.service )
+}
+
 # result color
-function color::result(){
+color::result(){
     echo -e "\e[32m✔   " $1 "\e[m"
 }
 
-function main(){
+main(){
     config::hostname && color::result "Config Hostname Done."
     config::sshd && color::result "Config Sshd Done."
     new::sshkey && color::result "New Sshkey Done."
     remove::hostapp && color::result "Remove hostapp Done."
     remove::service  && color::result "Remove service of Baidu/Aliyun Cloud Done."
     config::repo  && color::result "Config Repo Done."
-    append::rc  && color::result "Append Rc Done."
+    append::rc  && color::result "Append Bashrc Done."
     new::goenv  && color::result "New GO env Done."
     new::iptables && color::result "Firewall Done."
+    new::mysql && color::result "MySQL 5.7 Done."
 }
 
 main "$@"

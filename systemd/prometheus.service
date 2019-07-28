@@ -1,0 +1,22 @@
+[Unit]
+Description=Prometheus Monitoring System
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=prometheus
+LimitNOFILE=10000
+ExecStart=/apps/prometheus/prometheus \
+    --config.file=/apps/prometheus/prometheus.yml \
+    --storage.tsdb.path=/apps/prometheus/data \
+    --web.listen-address=:9090
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -9 $MAINPID
+TimeoutStopSec=50
+Restart=on-failure
+RestartPreventExitStatus=1
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

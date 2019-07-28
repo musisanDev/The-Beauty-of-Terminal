@@ -7,9 +7,9 @@ Documentation=https://redis.io/documentation
 Type=forking
 User=redis
 Group=redis
-Environment="OPTIONS=/usr/local/redis/%i/conf/redis.conf"
-ExecStart=/usr/local/redis/bin/redis-server $OPTIONS
-ExecStop=/usr/local/redis/bin/redis-cli -p %i shutdown
+Environment="OPTIONS=/apps/redis/%i/conf/redis.conf"
+ExecStart=/apps/redis/bin/redis-server $OPTIONS
+ExecStop=/apps/redis/bin/redis-cli -p %i shutdown
 Restart=always
 
 [Install]
