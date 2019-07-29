@@ -1,0 +1,16 @@
+---
+systemLog:
+  destination: file
+  path: "/apps/mongodb/27017/log/mongod.log"
+  logAppend: true
+storage:
+  dbPath: "/apps/mongodb/27017/data/"
+  journal:
+    enabled: true
+  engine: wiredTiger
+processManagement:
+  fork: true
+  pidFilePath: "/apps/mongodb/27017/log/mongod.pid"
+net:
+  port: 27017
+  bindIp: 127.0.0.1

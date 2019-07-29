@@ -5,7 +5,7 @@ stty erase ^H
 
 read -p $'Which directory do you want to create as an application directory?\n' APPDIR
 : ${APPDIR:="/silis"}
-
+: ${RAWURL:="https://raw.githubusercontent.com/musisanDev/The-Beauty-of-Terminal/master/"}
 
 
 # change hostname & write into hosts
@@ -130,8 +130,24 @@ new::mysql(){
 }
 
 new::nginx(){
-    xxx
+    wget ${RAWURL}/repos/nginx.repo -P /etc/yum.repos.d/
     yum install nginx -y
+    enen(){
+        ( cd /tmp && \
+            nginxTar='nginx-1.16.0.tar.gz' && \
+            wget http://nginx.org/download/${nginxTar} && \
+            tar zxf $nginxTar && \
+            mkdir -p ~/.vim &>/dev/null && \
+            cp -rf ${nginxTar%.tar.gz}/contrib/vim/* ~/.vim && \
+            rm -rf ${nginxTar%.tar.gz}* )
+    }
+    read -p $'Do you need a color matching nginx configuration file? [y/n]'
+    case $REPLY in
+        y|Y|yes)
+            enen;;
+        *)
+            echo "skipping it...";;
+    esac
 }
 
 new::prometheus(){
@@ -143,9 +159,8 @@ new::prometheus(){
         mv ${prometheusTar%.tar.gz}/* ${APPDIR}/prometheus \
         rm -rf ${prometheusTar%.tar.gz}
     chown -R prometheus:prometheus ${APPDIR}/prometheus
-    # 下载service文件然后替换
     ( cd /usr/lib/systemd/system/ && \
-        ----------------------------------------------- && \
+        wget ${RAWURL}/systemd/prometheus.service && \
         sed -i "/apps/s/apps/${APPDIR}/g" prometheus.service && \
         systemctl daemon-reload && systemctl enable prometheus.service )
 }
@@ -161,7 +176,7 @@ new::alertmanager(){
     chown -R alertmanager:alertmanager ${APPDIR}/alertmanager
     # 需要替换
     ( cd /usr/lib/systemd/system/ && \
-        ----------------------------------------------- && \
+        wget ${RAWURL}/systemd/alertmanager.service && \
         sed -i "/apps/s/apps/${APPDIR}/g" alertmanager.service && \
         systemctl daemon-reload && systemctl enable alertmanager.service )
 }
@@ -177,7 +192,7 @@ new::node(){
     chown -R nodeexporter:nodeexporter ${APPDIR}/nodeexporter
     # 需要替换
     ( cd /usr/lib/systemd/system/ && \
-        ----------------------------------------------- && \
+        wget ${RAWURL}/systemd/node_exporter.service && \
         sed -i "/apps/s/apps/${APPDIR}/g" node_exporter.service && \
         systemctl daemon-reload && systemctl enable node_exporter.service )
 }
@@ -189,14 +204,12 @@ new::redis(){
     wget http://download.redis.io/releases/redis-4.0.14.tar.gz
     tar zxvf $redisTar
     ( cd ${redisTar%.tar.gz} && make PREFIX=${APPDIR}/redis install )
-    # 需要下载配置文件
-    ---------
     ( cd ${APPDIR}/redis/6379/conf && \
+        wget ${RAWURL}/conf/redis.conf && \
         sed -i "/apps/s/apps/${APPDIR}/g" redis.conf )
     chown -R redis:redis ${APPDIR}/redis
-    # 需要下载systemd文件
     ( cd /usr/lib/systemd/system/ && \
-        ----------------------------------------------- && \
+        wget ${RAWURL}/systemd/redis@.service && \
         sed -i "/apps/s/apps/${APPDIR}/g" redis@.service && \
         systemctl daemon-reload && systemctl enable redis@6379.service )
 }
@@ -207,14 +220,12 @@ new::mongod(){
     mkdir -p ${APPDIR}/mongodb/27017/{conf,data,log}
     wget https://fastdl.mongodb.org/linux/${mongoTar}
     tar zxvf ${mongoTar} && mv ${mongoTar%.tar.gz}/bin ${APPDIR}/mongodb
-    # 下载mongod。yml文件然后修改apps，和上面的redis一样，要改目录
-    ----------------
     ( cd ${APPDIR}/mongodb/27017/conf && \
+        wget ${RAWURL}/conf/mongod.yml && \
         sed -i "/apps/s/apps/${APPDIR}/g" mongod.yml )
     chown -R mongod:mongod ${APPDIR}/mongodb
-    # 下载systemd文件
     ( cd /usr/lib/systemd/system/ && \
-        ----------------------------------------------- && \
+        wget ${RAWURL}/systemd/mongod@.service && \
         sed -i "/apps/s/apps/${APPDIR}/g" mongod@.service && \
         systemctl daemon-reload && systemctl enable mongod@27017.service )
 }
