@@ -69,9 +69,9 @@ remove::service(){
 # update tsinghua mirrors
 config::repo(){
     baseRepo=/etc/yum.repos.d/CentOS-Base.repo
-    cd `echo ${baseRepo%C*}` \
-        && action "remove origin base.repo" rm -f !(CentOS-Base.repo|epel.repo) \
-        && cd -
+    cd `echo ${baseRepo%C*}` && \
+        action "remove origin base.repo" rm -f !(CentOS-Base.repo|epel.repo) && \
+        cd -
     for repoFile in `echo ${baseRepo%C*}`/*;do
         sed -i '/baseurl/s/baidubce.com/tuna.tsinghua.edu.cn/' ${repoFile} &>/dev/null
         sed -i '/baseurl/s/cloud.aliyuncs.com/tuna.tsinghua.edu.cn/' ${repoFile} &>/dev/null
