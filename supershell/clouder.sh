@@ -244,6 +244,7 @@ SSR(){
     read -p $'Enter passwd for ss:\n' sspwd
     local dport=$(shuf -i 9000-20000 -n 1)
     local sscipher='aes-256-cfb'
+    local service='shadowsocks'
     yum install -y python python-devel python-setuptools openssl openssl-devel unzip gcc automake autoconf make libtool
     cat < /etc/shadowsocks.json<<-EOF
 {
@@ -287,7 +288,7 @@ EOF
     ( cd shadowsocks-master && python setup.py install )
 
     if [ -f /usr/bin/ssserver ] || [ -f /usr/local/bin/ssserver ]; then
-        wget -P /etc/init.d/ 
+        wget -P /etc/init.d/ https://raw.githubusercontent.com/musisanDev/The-Beauty-of-Terminal/master/systemd/${service}
         chmod +x /etc/init.d/shadowsocks
         chkconfig --add shadowsocks
         chkconfig shadowsocks on
