@@ -238,6 +238,8 @@ new::mongod(){
 }
 
 SSR(){
+    local libsodium='libsodium-1.0.18.tar.gz'
+    local master='shadowsocks-master.zip'
     local sspwd=
     read -p $'Enter passwd for ss:\n' sspwd
     local dport=$(shuf -i 9000-20000 -n 1)
@@ -270,17 +272,22 @@ EOF
     fi
     #----------------------
     if [ ! -f /usr/lib/libsodium.a ]; then
-        #---下载相关文件libsodium
-        tar zxf ${libsodium_file}.tar.gz
-        ./configure --prefix=/usr && make && make install
+        wget https://github.com/musisanDev/The-Beauty-of-Terminal/raw/master/packages/${libsodium}
+        tar zxvf ${libsodium} -C .
+        ( cd ${libsodium%.tar.gz} && \
+            ./configure --prefix=/usr && \
+            make && make install )
     fi
     ldconfig
 
-    unzip -q shadowsocks-master.zip
-    cd shadowsocks-master
-    python setup.py install
+    if [ ! -f ${master} ];then
+        wget https://github.com/musisanDev/The-Beauty-of-Terminal/raw/master/packages/${master}
+    fi
+    unzip ${master} 
+    ( cd shadowsocks-master && python setup.py install )
 
     if [ -f /usr/bin/ssserver ] || [ -f /usr/local/bin/ssserver ]; then
+        wget -P /etc/init.d/ 
         chmod +x /etc/init.d/shadowsocks
         chkconfig --add shadowsocks
         chkconfig shadowsocks on
