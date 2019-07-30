@@ -4,15 +4,17 @@ shopt -s extglob
 clear
 stty erase ^H
 
-read -p $'Which directory do you want to create as an application directory?\n' APPDIR
+APPDIR=$(whiptail --title "An application directory" \
+    --inputbox "Which directory do you want to create?" \
+    10 60 /silis 3>&1 1>&2 2>&3)
 : ${APPDIR:="/silis"} && mkdir -p ${APPDIR}
 : ${RAWURL:="https://raw.githubusercontent.com/musisanDev/The-Beauty-of-Terminal/master/"}
 
 
 # change hostname & write into hosts
 config::hostname(){
-    local HN=
-    read -p $'Enter new hostname: \n' HN
+    local HN=$(whiptail --title "New HostName" --inputbox "Specify an hostname"\
+        10 60 3>&1 1>&2 2>&3)
     /usr/bin/hostnamectl set-hostname ${HN}
     local innerIp=$(hostname -I)
     echo -n "$innerIp $HN" >> /etc/hosts
@@ -21,7 +23,8 @@ config::hostname(){
 # change ssh port & banned root login with password
 config::sshd(){
     local sshConfig=/etc/ssh/sshd_config
-    read -p $'Enter new port: \n' SP
+    local SP=$(whiptail --title "New SSHPort" --inputbox "Specify an valid port"\
+        10 30 3>&1 1>&2 2>&3)
     sed -i "/22/aPort ${SP}" ${sshConfig}
     sed -i '/^Pass/s/yes/no/' ${sshConfig}
     service sshd restart
@@ -120,10 +123,9 @@ new::iptables(){
     systemctl enable iptables.service
     systemctl start iptables.service
     {
-        iptables -P INPUT ACCEPT
-        iptables -Z
-        iptables -R INPUT -m state --state NEW -p tcp --dport ${SP} -j ACCEPT
+        iptables -R INPUT 4 -m state --state NEW -p tcp --dport ${SP} -j ACCEPT
         iptables -D INPUT 5
+        iptables -P INPUT DROP
         service iptables save
     }
 }
@@ -149,13 +151,11 @@ new::nginx(){
             rm -rf ${nginxTar%.tar.gz}* )
         systemd enable nginx
     }
-    read -p $'Do you need a color matching nginx configuration file? [y/n]'
-    case $REPLY in
-        y|Y|yes)
-            enen;;
-        *)
-            echo "skipping it...";;
-    esac
+    if (whiptail --title "Yes/No" --yesno "Do you need a color matching nginx configuration file?" 10 60) then
+        enen
+    else
+        echo "Skipping it..." && sleep 1
+    fi
 }
 
 new::prometheus(){
@@ -240,13 +240,13 @@ new::mongod(){
 SSR(){
     local libsodium='libsodium-1.0.18.tar.gz'
     local master='shadowsocks-master.zip'
-    local sspwd=
-    read -p $'Enter passwd for ss:\n' sspwd
+    local sspwd=$(whiptail --title "Shadowsocks Passwd" --passwordbox "Specify an passwd"\
+        10 40 3>&1 1>&2 2>&3)
     local dport=$(shuf -i 9000-20000 -n 1)
     local sscipher='aes-256-cfb'
     local service='shadowsocks'
     yum install -y python python-devel python-setuptools openssl openssl-devel unzip gcc automake autoconf make libtool
-    cat < /etc/shadowsocks.json<<-EOF
+    cat > /etc/shadowsocks.json <<-EOF
 {
     "server":"0.0.0.0",
     "server_port":${dport},
@@ -258,19 +258,9 @@ SSR(){
     "fast_open":false
 }
 EOF
-    if /etc/init.d/iptables status > /dev/null 2>&1 ; then
-        iptables -L -n | grep -i ${dport} > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
-            iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport ${dport} -j ACCEPT
-            iptables -I INPUT -m state --state NEW -m udp -p udp --dport ${dport} -j ACCEPT
-            /etc/init.d/iptables save
-            /etc/init.d/iptables restart
-        else
-            echo -e "Port ${dport} has already been set up."
-        fi
-    else
-        echo -e "Iptables looks like shutdown or not installed, please manually set it if necessary."
-    fi
+    iptables -I INPUT 3 -m state --state NEW -m tcp -p tcp --dport ${dport} -j ACCEPT
+    iptables -I INPUT 3 -m state --state NEW -m udp -p udp --dport ${dport} -j ACCEPT
+    service iptables save
     #----------------------
     if [ ! -f /usr/lib/libsodium.a ]; then
         wget https://github.com/musisanDev/The-Beauty-of-Terminal/raw/master/packages/${libsodium}
