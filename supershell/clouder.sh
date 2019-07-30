@@ -1,15 +1,17 @@
 #!/bin/bash
 . /etc/init.d/functions
 shopt -s extglob
+clear
 stty erase ^H
 
 read -p $'Which directory do you want to create as an application directory?\n' APPDIR
-: ${APPDIR:="/silis"}
+: ${APPDIR:="/silis"} && mkdir -p ${APPDIR}
 : ${RAWURL:="https://raw.githubusercontent.com/musisanDev/The-Beauty-of-Terminal/master/"}
 
 
 # change hostname & write into hosts
 config::hostname(){
+    local HN=
     read -p $'Enter new hostname: \n' HN
     /usr/bin/hostnamectl set-hostname ${HN}
     local innerIp=$(hostname -I)
@@ -33,16 +35,18 @@ new::sshkey(){
 
 # delete hosteye & bcm-agent
 remove::hostapp(){
-    service hosteye stop
-    service bcm-agent stop
-    service aegis stop
-    /usr/sbin/chkconfig --del hosteye
-    /usr/sbin/chkconfig --del bcm-agent
-    /usr/sbin/chkconfig --del aegis
-    service aegis uninstall
-    rm -f /etc/init.d/{hosteye,bcm-agent,aegis}
-    rm -rf /opt/{avalokita,bcm-agent,hosteye,rh}
-    rm -rf /usr/local/aegis
+    {
+        service hosteye stop
+        service bcm-agent stop
+        service aegis stop
+        /usr/sbin/chkconfig --del hosteye
+        /usr/sbin/chkconfig --del bcm-agent
+        /usr/sbin/chkconfig --del aegis
+        service aegis uninstall
+        rm -f /etc/init.d/{hosteye,bcm-agent,aegis}
+        rm -rf /opt/{avalokita,bcm-agent,hosteye,rh}
+        rm -rf /usr/local/aegis
+    } &>/dev/null
     test $? -eq 0 && action "uninstall host service"
 }
 
@@ -68,15 +72,17 @@ remove::service(){
 
 # update tsinghua mirrors
 config::repo(){
-    baseRepo=/etc/yum.repos.d/CentOS-Base.repo
-    cd `echo ${baseRepo%C*}` && \
-        action "remove origin base.repo" rm -f !(CentOS-Base.repo|epel.repo) && \
-        cd -
-    for repoFile in `echo ${baseRepo%C*}`/*;do
-        sed -i '/baseurl/s/baidubce.com/tuna.tsinghua.edu.cn/' ${repoFile} &>/dev/null
-        sed -i '/baseurl/s/cloud.aliyuncs.com/tuna.tsinghua.edu.cn/' ${repoFile} &>/dev/null
-        sed -i '/mirrors/s/http/https/' ${repoFile}
-    done
+    if ! ping -W 2 -c 3 www.google.com &>/dev/null ; then
+        baseRepo=/etc/yum.repos.d/CentOS-Base.repo
+        cd `echo ${baseRepo%C*}` && \
+            action "remove origin base.repo" rm -f !(CentOS-Base.repo|epel.repo) && \
+            cd -
+        for repoFile in `echo ${baseRepo%C*}`/*;do
+            sed -i '/baseurl/s/baidubce.com/tuna.tsinghua.edu.cn/' ${repoFile} &>/dev/null
+            sed -i '/baseurl/s/cloud.aliyuncs.com/tuna.tsinghua.edu.cn/' ${repoFile} &>/dev/null
+            sed -i '/mirrors/s/http/https/' ${repoFile}
+        done
+    fi
     /bin/yum makecache
 }
 
@@ -103,7 +109,7 @@ EOF
 }
 
 pre::package(){
-    yum -y install net-snmp sendmail openssl-dev gcc tmux lsof lrzsz yum-utils
+    yum -y install net-snmp sendmail openssl-devel gcc gcc-c++ vim tmux lsof lrzsz yum-utils
 }
 
 new::iptables(){
@@ -123,10 +129,11 @@ new::iptables(){
 }
 
 new::mysql(){
-    repoRPM='mysql57-community-release-el7-10.noarch.rpm'
+    local repoRPM='mysql57-community-release-el7-10.noarch.rpm'
     wget https://repo.mysql.com/yum/mysql-5.7-community/el/7/x86_64/${repoRPM}
     rpm -ivh ${repoRPM} 
     yum -y install mysql mysql-server
+    rm -f $repoRPM
 }
 
 new::nginx(){
@@ -140,6 +147,7 @@ new::nginx(){
             mkdir -p ~/.vim &>/dev/null && \
             cp -rf ${nginxTar%.tar.gz}/contrib/vim/* ~/.vim && \
             rm -rf ${nginxTar%.tar.gz}* )
+        systemd enable nginx
     }
     read -p $'Do you need a color matching nginx configuration file? [y/n]'
     case $REPLY in
@@ -156,12 +164,12 @@ new::prometheus(){
     useradd -r -d ${APPDIR}/prometheus -c "Prometheus Server" -s /sbin/nologin prometheus
     wget https://github.com/prometheus/prometheus/releases/download/v2.11.1/${prometheusTar}
     tar zxvf ${prometheusTar} && \
-        mv ${prometheusTar%.tar.gz}/* ${APPDIR}/prometheus \
+        mv ${prometheusTar%.tar.gz}/* ${APPDIR}/prometheus && \
         rm -rf ${prometheusTar%.tar.gz}
     chown -R prometheus:prometheus ${APPDIR}/prometheus
     ( cd /usr/lib/systemd/system/ && \
         wget ${RAWURL}/systemd/prometheus.service && \
-        sed -i "/apps/s/apps/${APPDIR}/g" prometheus.service && \
+        sed -i "/apps/s/apps/${APPDIR#/}/g" prometheus.service && \
         systemctl daemon-reload && systemctl enable prometheus.service )
 }
 
@@ -171,13 +179,13 @@ new::alertmanager(){
     useradd -r -d ${APPDIR}/alertmanager -c "Alert Server" -s /sbin/nologin alertmanager
     wget https://github.com/prometheus/alertmanager/releases/download/v0.18.0/${amTar}
     tar zxvf ${amTar} && \
-        mv ${amTar%.tar.gz}/* ${APPDIR}/alertmanager \
+        mv ${amTar%.tar.gz}/* ${APPDIR}/alertmanager && \
         rm -rf ${amTar%.tar.gz}
     chown -R alertmanager:alertmanager ${APPDIR}/alertmanager
     # 需要替换
     ( cd /usr/lib/systemd/system/ && \
         wget ${RAWURL}/systemd/alertmanager.service && \
-        sed -i "/apps/s/apps/${APPDIR}/g" alertmanager.service && \
+        sed -i "/apps/s/apps/${APPDIR#/}/g" alertmanager.service && \
         systemctl daemon-reload && systemctl enable alertmanager.service )
 }
 
@@ -187,13 +195,12 @@ new::node(){
     useradd -r -d ${APPDIR}/node_exporter -c "Node Check Server" -s /sbin/nologin nodeexporter
     wget https://github.com/prometheus/node_exporter/releases/download/v0.18.1/$nodeTar
     tar zxvf ${nodeTar} && \
-        mv ${nodeTar%.tar.gz}/* ${APPDIR}/node_exporter \
+        mv ${nodeTar%.tar.gz}/* ${APPDIR}/node_exporter && \
         rm -rf ${nodeTar%.tar.gz}
-    chown -R nodeexporter:nodeexporter ${APPDIR}/nodeexporter
-    # 需要替换
+    chown -R nodeexporter:nodeexporter ${APPDIR}/node_exporter
     ( cd /usr/lib/systemd/system/ && \
         wget ${RAWURL}/systemd/node_exporter.service && \
-        sed -i "/apps/s/apps/${APPDIR}/g" node_exporter.service && \
+        sed -i "/apps/s/apps/${APPDIR#/}/g" node_exporter.service && \
         systemctl daemon-reload && systemctl enable node_exporter.service )
 }
 
@@ -203,31 +210,82 @@ new::redis(){
     mkdir -p ${APPDIR}/redis/6379/{log,conf,data,var}
     wget http://download.redis.io/releases/redis-4.0.14.tar.gz
     tar zxvf $redisTar
-    ( cd ${redisTar%.tar.gz} && make PREFIX=${APPDIR}/redis install )
+    ( cd ${redisTar%.tar.gz} && make PREFIX=${APPDIR}/redis MALLOC=libc install )
     ( cd ${APPDIR}/redis/6379/conf && \
         wget ${RAWURL}/conf/redis.conf && \
-        sed -i "/apps/s/apps/${APPDIR}/g" redis.conf )
-    chown -R redis:redis ${APPDIR}/redis
+        sed -i "/apps/s/apps/${APPDIR#/}/g" redis.conf )
     ( cd /usr/lib/systemd/system/ && \
         wget ${RAWURL}/systemd/redis@.service && \
-        sed -i "/apps/s/apps/${APPDIR}/g" redis@.service && \
+        sed -i "/apps/s/apps/${APPDIR#/}/g" redis@.service && \
         systemctl daemon-reload && systemctl enable redis@6379.service )
+    chown -R redis:redis ${APPDIR}/redis
 }
 
 new::mongod(){
     mongoTar='mongodb-linux-x86_64-rhel70-4.0.11.tgz'
-    useradd -r -d ${APPDIR}/mongodb -c "Mongodb Server" -s /sbin/nologin mongodb
+    useradd -r -d ${APPDIR}/mongodb -c "Mongodb Server" -s /sbin/nologin mongod
     mkdir -p ${APPDIR}/mongodb/27017/{conf,data,log}
     wget https://fastdl.mongodb.org/linux/${mongoTar}
-    tar zxvf ${mongoTar} && mv ${mongoTar%.tar.gz}/bin ${APPDIR}/mongodb
+    tar zxvf ${mongoTar} && mv ${mongoTar%.tgz}/bin ${APPDIR}/mongodb
     ( cd ${APPDIR}/mongodb/27017/conf && \
         wget ${RAWURL}/conf/mongod.yml && \
-        sed -i "/apps/s/apps/${APPDIR}/g" mongod.yml )
-    chown -R mongod:mongod ${APPDIR}/mongodb
+        sed -i "/apps/s/apps/${APPDIR#/}/g" mongod.yml )
     ( cd /usr/lib/systemd/system/ && \
         wget ${RAWURL}/systemd/mongod@.service && \
-        sed -i "/apps/s/apps/${APPDIR}/g" mongod@.service && \
+        sed -i "/apps/s/apps/${APPDIR#/}/g" mongod@.service && \
         systemctl daemon-reload && systemctl enable mongod@27017.service )
+    chown -R mongod:mongod ${APPDIR}/mongodb
+}
+
+SSR(){
+    local sspwd=
+    read -p $'Enter passwd for ss:\n' sspwd
+    local dport=$(shuf -i 9000-20000 -n 1)
+    local sscipher='aes-256-cfb'
+    yum install -y python python-devel python-setuptools openssl openssl-devel unzip gcc automake autoconf make libtool
+    cat < /etc/shadowsocks.json<<-EOF
+{
+    "server":"0.0.0.0",
+    "server_port":${dport},
+    "local_address":"127.0.0.1",
+    "local_port":1080,
+    "password":"${sspwd}",
+    "timeout":300,
+    "method":"${sscipher}",
+    "fast_open":false
+}
+EOF
+    if /etc/init.d/iptables status > /dev/null 2>&1 ; then
+        iptables -L -n | grep -i ${dport} > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport ${dport} -j ACCEPT
+            iptables -I INPUT -m state --state NEW -m udp -p udp --dport ${dport} -j ACCEPT
+            /etc/init.d/iptables save
+            /etc/init.d/iptables restart
+        else
+            echo -e "Port ${dport} has already been set up."
+        fi
+    else
+        echo -e "Iptables looks like shutdown or not installed, please manually set it if necessary."
+    fi
+    #----------------------
+    if [ ! -f /usr/lib/libsodium.a ]; then
+        #---下载相关文件libsodium
+        tar zxf ${libsodium_file}.tar.gz
+        ./configure --prefix=/usr && make && make install
+    fi
+    ldconfig
+
+    unzip -q shadowsocks-master.zip
+    cd shadowsocks-master
+    python setup.py install
+
+    if [ -f /usr/bin/ssserver ] || [ -f /usr/local/bin/ssserver ]; then
+        chmod +x /etc/init.d/shadowsocks
+        chkconfig --add shadowsocks
+        chkconfig shadowsocks on
+        /etc/init.d/shadowsocks start
+    fi
 }
 
 # result color
@@ -243,9 +301,17 @@ main(){
     remove::service  && color::result "Remove service of Baidu/Aliyun Cloud Done."
     config::repo  && color::result "Config Repo Done."
     append::rc  && color::result "Append Bashrc Done."
+    pre::package && color::result "Package yum Done."
     new::goenv  && color::result "New GO env Done."
     new::iptables && color::result "Firewall Done."
     new::mysql && color::result "MySQL 5.7 Done."
+    new::nginx && color::result "Nginx Done."
+    new::prometheus && color::result "Prometheus Done."
+    new::alertmanager && color::result "Alertmanager Done."
+    new::node && color::result "Node Exporter Done."
+    new::redis && color::result "Redis Done."
+    new::mongod && color::result "Mongodb Done."
+    SSR && color::result "SSR Done."
 }
 
 main "$@"
