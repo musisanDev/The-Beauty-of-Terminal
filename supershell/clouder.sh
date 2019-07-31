@@ -158,7 +158,7 @@ mysql(){
 nginx(){
     wget -q ${RAWURL}/repos/nginx.repo -P /etc/yum.repos.d/
     yum install nginx -y &> /dev/null
-    systemd enable nginx
+    systemctl enable nginx
     enen(){
         ( cd /tmp && \
             nginxTar='nginx-1.16.0.tar.gz' && \
@@ -205,7 +205,7 @@ sslcacert=/etc/pki/tls/certs/ca-bundle.crt
 EOF
     yum install grafana -y
     # modify smtp via /etc/grafana/grafana.ini 
-    sed -i -e "/smtp/aenabled = true\nhost = smtp.163.com:465\nuser = musisan@163.com\npassword = 1101iPerl\nskip_verify = true\nfrom_address = Grafana\n" /etc/grafana/grafana.ini
+    sed -i -e "/smtp/aenabled = true\nhost = smtp.163.com:465\nuser = musisan@163.com\npassword = 1101iPerl\nskip_verify = true\nfrom_address = musisan@163.com\nfrom_name = Grafana" /etc/grafana/grafana.ini
     systemctl enable grafana-server
     command -v grafana-cli 1>/dev/null && fb s "Granafa Server Done." || fb e "Grafana Server Failed."
 }
@@ -378,7 +378,7 @@ main(){
     test ! -z $rs_f && redis
     test ! -z $md_f && mongod
     test ! -z $sr_f && ssr
-    test ! -z $ie_f && iptable
+    test ! -z $ie_f && firewall
 }
 
 if [[ "$@" == "-c" ]]; then
