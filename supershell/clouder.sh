@@ -33,12 +33,19 @@ fb(){
     esac
 }
 
-RAWURL="https://raw.githubusercontent.com/musisanDev/The-Beauty-of-Terminal/master/"
-APPDIR=$(whiptail --title "An application directory" --inputbox "Which directory do you want to create?" 10 60 3>&1 1>&2 2>&3)
-[[ ! -z ${APPDIR} && ${APPDIR:0:1} == '/' ]] && {
-    fb s "Valid Appdir."
-    mkdir -p $APPDIR &>/dev/null
-} || fb e "Invalid Appdir."
+app_dir(){
+    RAWURL="https://raw.githubusercontent.com/musisanDev/The-Beauty-of-Terminal/master/"
+    APPDIR=$(whiptail --title "An application directory" --inputbox "Which directory do you want to create?" 10 60 3>&1 1>&2 2>&3)
+    [[ ! -z ${APPDIR} && ${APPDIR:0:1} == '/' ]] && {
+        fb s "Valid Appdir."
+        mkdir -p $APPDIR &>/dev/null
+    } || fb e "Invalid Appdir."
+}
+
+generate(){
+    echo -e "# host_name\nhn_f=1\nhostname=dev.cloud.earth\ninner_ip=172.31.197.71\n# ssh_port_pass\nspp_f=1\nssh_config=/etc/ssh/sshd_config\nssh_port=2268\n# ssh_key\nsk_f=1\nssh_key_file=/root/.ssh/id_rsa\n# host_app\nha_f=1\n# mirrors\nms_f=1\n# vim_bash_rc\nvbr_f=1\n# golang\ng_f=1\ngoDir=/usr/local/golang\n# mysql\nml_f=1\n# nginx\nnx_f=1\ncolorNginx=true\n# nvm\nnm_f=1\n# jenkins\njs_f=1\n# grafana\nga_f=1\n# prometheus\nps_f=1\n# alertmanager\nar_f=1\n# node\nne_f=1\n# redis\nrs_f=1\n# mongod\nmd_f=1\n# ssr\nsr_f=1\n# iptable\nie_f=1\n" > clouder.conf
+    test $? -eq 0 && fb s "Generated Config File." || fb e "Generated File Failed."
+}
 
 host_name(){
     #local HN=$(whiptail --title "New HostName" --inputbox "Specify an hostname"\
@@ -352,6 +359,7 @@ firewall(){
 }
 
 main(){
+    app_dir
     test ! -z $hn_f && host_name
     test ! -z $spp_f && ssh_port_pass
     test ! -z $sk_f && ssh_key
@@ -373,4 +381,8 @@ main(){
     test ! -z $ie_f && iptable
 }
 
-main "$@"
+if [[ "$@" == "-c" ]]; then
+    generate
+else
+    main
+fi
