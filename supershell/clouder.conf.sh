@@ -1,0 +1,45 @@
+# host_name
+hn_f=1
+hostname=dev.cloud.earth
+inner_ip=172.31.197.71
+# ssh_port_pass
+spp_f=1
+ssh_config=/etc/ssh/sshd_config
+ssh_port=2268
+# ssh_key
+sk_f=1
+ssh_key_file=/root/.ssh/id_rsa
+# host_app
+ha_f=1
+# mirrors
+ms_f=1
+# vim_bash_rc
+vbr_f=1
+# golang
+g_f=1
+goDir=/usr/local/golang
+# mysql
+ml_f=1
+# nginx
+nx_f=1
+colorNginx=true
+# nvm
+nm_f=1
+# jenkins
+js_f=1
+# grafana
+ga_f=1
+# prometheus
+ps_f=1
+# alertmanager
+ar_f=1
+# node
+ne_f=1
+# redis
+rs_f=1
+# mongod
+md_f=1
+# ssr
+sr_f=1
+# iptable
+ie_f=1

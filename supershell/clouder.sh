@@ -1,43 +1,74 @@
 #!/bin/bash
-. /etc/init.d/functions
+. clouder.conf.sh
+
 shopt -s extglob
-clear
-stty erase ^H
+PATH="$PATH:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+export $PATH
 
-APPDIR=$(whiptail --title "An application directory" \
-    --inputbox "Which directory do you want to create?" \
-    10 60 /silis 3>&1 1>&2 2>&3)
-: ${APPDIR:="/silis"} && mkdir -p ${APPDIR}
-: ${RAWURL:="https://raw.githubusercontent.com/musisanDev/The-Beauty-of-Terminal/master/"}
+clear && SELF_DIR=$(cd $(mktemp -d /tmp/tmp.XXXXX) && pwd -P)
+trap "rm -rf ${SELF_DIR:?}/*" EXIT ERR
 
-
-# change hostname & write into hosts
-config::hostname(){
-    local HN=$(whiptail --title "New HostName" --inputbox "Specify an hostname"\
-        10 60 3>&1 1>&2 2>&3)
-    /usr/bin/hostnamectl set-hostname ${HN}
-    local innerIp=$(hostname -I)
-    echo -n "$innerIp $HN" >> /etc/hosts
+fb(){
+    : ${1:?}
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[0;33m'
+    local PLAIN='\033[0m'
+    case $1 in
+        's')
+            echo -e $"${GREEN}✓ $2${PLAIN}"
+            sleep 0.5
+            return 0
+            ;;
+        'e')
+            echo -e $"${RED}✘ $2${PLAIN}"
+            sleep 0.5
+            return 1
+            ;;
+        'w')
+            echo -e $"${YELLOW}✻ $2${PLAIN}"
+            sleep 0.5
+            return 0
+            ;;
+    esac
 }
 
-# change ssh port & banned root login with password
-config::sshd(){
-    local sshConfig=/etc/ssh/sshd_config
-    local SP=$(whiptail --title "New SSHPort" --inputbox "Specify an valid port"\
-        10 30 3>&1 1>&2 2>&3)
-    sed -i "/22/aPort ${SP}" ${sshConfig}
-    sed -i '/^Pass/s/yes/no/' ${sshConfig}
+RAWURL="https://raw.githubusercontent.com/musisanDev/The-Beauty-of-Terminal/master/"
+APPDIR=$(whiptail --title "An application directory" --inputbox "Which directory do you want to create?" 10 60 3>&1 1>&2 2>&3)
+[[ ! -z ${APPDIR} && ${APPDIR:0:1} == '/' ]] && {
+    fb s "Valid Appdir."
+    mkdir -p $APPDIR &>/dev/null
+} || fb e "Invalid Appdir."
+
+host_name(){
+    #local HN=$(whiptail --title "New HostName" --inputbox "Specify an hostname"\
+    #    10 60 3>&1 1>&2 2>&3)
+    hostnamectl set-hostname ${hostname}
+    echo -n "$inner_ip $hostname" >> /etc/hosts
+    if [[ `hostname -f` == "$hostname" ]];then
+        fb s "Hostname Modified."
+    else
+        fb e "Hostname Modified Failed."
+    fi
+}
+
+ssh_port_pass(){
+    #local SP=$(whiptail --title "New SSHPort" --inputbox "Specify an valid port"\
+    #    10 30 3>&1 1>&2 2>&3)
+    sed -i "/22/aPort ${ssh_port}" ${ssh_config}
+    sed -i '/^Pass/s/yes/no/' ${ssh_config}
     service sshd restart
+    test $? -eq 0 && fb s "SshPort Modified." || fb e "SshPort Modified Failed."
 }
 
-# generate ssh key for login into server
-new::sshkey(){
-    local outFile=/root/.ssh/id_rsa
-    /usr/bin/ssh-keygen -t rsa -b 4096 -N '' -f ${outFile}
+ssh_key(){
+    ssh-keygen -t rsa -b 4096 -N '' -f ${ssh_key_file}
+    test $? -eq 0 && fb s "Sshkey Generated." || {
+        fb e "Sshkey Generated Failed."
+    }
 }
 
-# delete hosteye & bcm-agent
-remove::hostapp(){
+host_app(){
     {
         service hosteye stop
         service bcm-agent stop
@@ -49,34 +80,26 @@ remove::hostapp(){
         rm -f /etc/init.d/{hosteye,bcm-agent,aegis}
         rm -rf /opt/{avalokita,bcm-agent,hosteye,rh}
         rm -rf /usr/local/aegis
-    } &>/dev/null
-    test $? -eq 0 && action "uninstall host service"
-}
-
-# stop & disable rpcbind
-remove::service(){
-    {
         systemctl stop rpcbind.service
         systemctl disable rpcbind.service
         systemctl mask rpcbind.service
         systemctl stop rpcbind.socket
         systemctl disable rpcbind.socket
         systemctl mask rpcbind.socket
-    } &> /dev/null
-    {
         systemctl stop aliyun
         systemctl disable aliyun
         rm -rf /usr/sbin/aliyun-*
         rm -rf /etc/systemd/system/aliyun.service
         rm -rf /usr/local/share/aliyun-assist/
-    } &> /dev/null
-    echo > /etc/motd && return 0
+    } &>/dev/null
+    test $? -eq 0 && fb s "Host App uninstalled." || {
+        fb w "Something was wrong about host-app."
+    }
 }
 
-# update tsinghua mirrors
-config::repo(){
+mirrors(){
     if ! ping -W 2 -c 3 www.google.com &>/dev/null ; then
-        baseRepo=/etc/yum.repos.d/CentOS-Base.repo
+        local baseRepo=/etc/yum.repos.d/CentOS-Base.repo
         cd `echo ${baseRepo%C*}` && \
             action "remove origin base.repo" rm -f !(CentOS-Base.repo|epel.repo) && \
             cd -
@@ -87,60 +110,48 @@ config::repo(){
         done
     fi
     /bin/yum makecache
+    yum -y install net-snmp sendmail openssl-devel gcc gcc-c++ vim tmux lsof lrzsz yum-utils
+    test $? -eq 0 && fb s "Yum Mirrors." || {
+        fb e "Yum Mirrors Failed."
+    }
 }
 
-# written .vimrc & .bashrc
-append::rc(){
-    vimStr="set nocompatible\nset backspace=2\nset nu\nset encoding=utf-8\nset ts=4\nset sw=4\nset smarttab\nset ai\nset si\nset hlsearch\nset incsearch\nset expandtab\nsyntax on\nautocmd FileType yaml setlocal ai ts=2 sw=2 expandtab\nfiletype plugin indent on"
+vim_bash_rc(){
+    local vimStr="set nocompatible\nset backspace=2\nset nu\nset encoding=utf-8\nset ts=4\nset sw=4\nset smarttab\nset ai\nset si\nset hlsearch\nset incsearch\nset expandtab\nsyntax on\nautocmd FileType yaml setlocal ai ts=2 sw=2 expandtab\nfiletype plugin indent on"
     echo -e ${vimStr} > ${HOME}/.vimrc
 cat >> ${HOME}/.bashrc <<'EOF'
     export PS1="[\[\e[37m\]\h\[\e[m\] \[\e[33m\]\W\[\e[m\]]\[\e[32m\]\\$\[\e[m\] "
 EOF
+    source ${HOME}/.bashrc && fb s "Vim and Bashrc Done." || fb e "Vim and Bashrc Failed."
 }
 
-# go env
-new::goenv(){
-    goFile=go1.12.7.linux-amd64.tar.gz
+golang(){
+    local goFile=go1.12.7.linux-amd64.tar.gz
     if wget https://studygolang.com/dl/golang/${goFile};then
-        tar zxf ${goFile} -C . && rm -f ${goFile} && mv go /usr/local/golang &>/dev/null
+        tar zxf ${goFile} -C . && rm -f ${goFile} && mv go ${goDir} &>/dev/null
     fi
 cat >> ${HOME}/.bashrc <<'EOF'
     export PATH=$PATH:/usr/local/golang/bin:$HOME/go/bin
     export GOBIN="${HOME}/go/bin"
     # export GOPROXY=https://goproxy.io
 EOF
+    source ${HOME}/.bashrc && command -v go
+    test $? -eq 0 && fb s "Golang Done." || fb e "Golang Failed."
 }
 
-pre::package(){
-    yum -y install net-snmp sendmail openssl-devel gcc gcc-c++ vim tmux lsof lrzsz yum-utils
-}
 
-new::iptables(){
-    systemctl stop firewalld
-    systemctl disable firewalld
-    yum -y update
-    yum -y install iptables-services
-    systemctl enable iptables.service
-    systemctl start iptables.service
-    {
-        iptables -R INPUT 4 -m state --state NEW -p tcp --dport ${SP} -j ACCEPT
-        iptables -D INPUT 5
-        iptables -P INPUT DROP
-        service iptables save
-    }
-}
-
-new::mysql(){
+mysql(){
     local repoRPM='mysql57-community-release-el7-10.noarch.rpm'
     wget https://repo.mysql.com/yum/mysql-5.7-community/el/7/x86_64/${repoRPM}
-    rpm -ivh ${repoRPM} 
-    yum -y install mysql mysql-server
-    rm -f $repoRPM
+    rpm -ivh ${repoRPM} && rm -f $repoRPM
+    yum -y install mysql mysql-server &> /dev/null
+    test $? -eq 0 && fb s "MySQL Server Done." || fb e "MySQL Server Failed."
 }
 
-new::nginx(){
-    wget ${RAWURL}/repos/nginx.repo -P /etc/yum.repos.d/
-    yum install nginx -y
+nginx(){
+    wget -q ${RAWURL}/repos/nginx.repo -P /etc/yum.repos.d/
+    yum install nginx -y &> /dev/null
+    systemd enable nginx
     enen(){
         ( cd /tmp && \
             nginxTar='nginx-1.16.0.tar.gz' && \
@@ -149,17 +160,51 @@ new::nginx(){
             mkdir -p ~/.vim &>/dev/null && \
             cp -rf ${nginxTar%.tar.gz}/contrib/vim/* ~/.vim && \
             rm -rf ${nginxTar%.tar.gz}* )
-        systemd enable nginx
     }
-    if (whiptail --title "Yes/No" --yesno "Do you need a color matching nginx configuration file?" 10 60) then
+    if [[ $colorNginx == "true" ]];then
         enen
-    else
-        echo "Skipping it..." && sleep 1
     fi
+    command -v nginx &>/dev/null && fb s "Nginx Done." || fb e "Nginx Failed."
 }
 
-new::prometheus(){
-    prometheusTar='prometheus-2.11.1.linux-amd64.tar.gz'
+nvm(){
+    wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+    source ~/.bashrc
+    nvm install 10.16.0
+    command -v npm &>/dev/null && fb s "Npm Done." || fb e "Npm Failed."
+}
+
+jenkins(){
+    wget -qO /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
+    rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+    yum install jenkins -y
+    if ! which java > /dev/null 2>&1; then
+        yum install java-1.8.0-openjdk -y
+    fi
+    systemctl enable jenkins
+    test $? -eq 0 && fb s "Jenkins Done." || fb e "Jenkins Failed."
+}
+
+grafana(){
+    cat > /etc/yum.repos.d/grafana.repo <<-EOF
+[grafana]
+name=grafana
+baseurl=https://packages.grafana.com/oss/rpm
+enabled=1
+gpgcheck=0
+gpgkey=https://packages.grafana.com/gpg.key
+sslverify=1
+sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+EOF
+    yum install grafana -y
+    # modify smtp via /etc/grafana/grafana.ini 
+    sed -i -e "/smtp/aenabled = true\nhost = smtp.163.com:465\nuser = musisan@163.com\npassword = 1101iPerl\nskip_verify = true\nfrom_address = Grafana\n" /etc/grafana/grafana.ini
+    systemctl enable grafana-server
+    command -v grafana-cli 1>/dev/null && fb s "Granafa Server Done." || fb e "Grafana Server Failed."
+}
+
+prometheus(){
+    local prometheusTar='prometheus-2.11.1.linux-amd64.tar.gz'
     mkdir -p ${APPDIR}/prometheus/data
     useradd -r -d ${APPDIR}/prometheus -c "Prometheus Server" -s /sbin/nologin prometheus
     wget https://github.com/prometheus/prometheus/releases/download/v2.11.1/${prometheusTar}
@@ -171,10 +216,11 @@ new::prometheus(){
         wget ${RAWURL}/systemd/prometheus.service && \
         sed -i "/apps/s/apps/${APPDIR#/}/g" prometheus.service && \
         systemctl daemon-reload && systemctl enable prometheus.service )
+    test $? -eq 0 && fb s "Prometheus Server Done." || fb e "Prometheus Server Failed."
 }
 
-new::alertmanager(){
-    amTar='alertmanager-0.18.0.linux-amd64.tar.gz'
+alertmanager(){
+    local amTar='alertmanager-0.18.0.linux-amd64.tar.gz'
     mkdir -p ${APPDIR}/alertmanager/data
     useradd -r -d ${APPDIR}/alertmanager -c "Alert Server" -s /sbin/nologin alertmanager
     wget https://github.com/prometheus/alertmanager/releases/download/v0.18.0/${amTar}
@@ -182,14 +228,14 @@ new::alertmanager(){
         mv ${amTar%.tar.gz}/* ${APPDIR}/alertmanager && \
         rm -rf ${amTar%.tar.gz}
     chown -R alertmanager:alertmanager ${APPDIR}/alertmanager
-    # 需要替换
     ( cd /usr/lib/systemd/system/ && \
         wget ${RAWURL}/systemd/alertmanager.service && \
         sed -i "/apps/s/apps/${APPDIR#/}/g" alertmanager.service && \
         systemctl daemon-reload && systemctl enable alertmanager.service )
+    test $? -eq 0 && fb s "AlertManager Done." || fb e "AlertManager Failed."
 }
 
-new::node(){
+node(){
     nodeTar='node_exporter-0.18.1.linux-amd64.tar.gz'
     mkdir -p ${APPDIR}/node_exporter
     useradd -r -d ${APPDIR}/node_exporter -c "Node Check Server" -s /sbin/nologin nodeexporter
@@ -202,10 +248,11 @@ new::node(){
         wget ${RAWURL}/systemd/node_exporter.service && \
         sed -i "/apps/s/apps/${APPDIR#/}/g" node_exporter.service && \
         systemctl daemon-reload && systemctl enable node_exporter.service )
+    test $? -eq 0 && fb s "Node Exporter Done." || fb e "Node Exporter Failed."
 }
 
-new::redis(){
-    redisTar='redis-4.0.14.tar.gz'
+redis(){
+    local redisTar='redis-4.0.14.tar.gz'
     useradd -r -d ${APPDIR}/redis -c "Redis Server" -s /sbin/nologin redis
     mkdir -p ${APPDIR}/redis/6379/{log,conf,data,var}
     wget http://download.redis.io/releases/redis-4.0.14.tar.gz
@@ -219,10 +266,11 @@ new::redis(){
         sed -i "/apps/s/apps/${APPDIR#/}/g" redis@.service && \
         systemctl daemon-reload && systemctl enable redis@6379.service )
     chown -R redis:redis ${APPDIR}/redis
+    test $? -eq 0 && fb s "Redis Server Done." || fb e "Redis Server Failed."
 }
 
-new::mongod(){
-    mongoTar='mongodb-linux-x86_64-rhel70-4.0.11.tgz'
+mongod(){
+    local mongoTar='mongodb-linux-x86_64-rhel70-4.0.11.tgz'
     useradd -r -d ${APPDIR}/mongodb -c "Mongodb Server" -s /sbin/nologin mongod
     mkdir -p ${APPDIR}/mongodb/27017/{conf,data,log}
     wget https://fastdl.mongodb.org/linux/${mongoTar}
@@ -235,9 +283,10 @@ new::mongod(){
         sed -i "/apps/s/apps/${APPDIR#/}/g" mongod@.service && \
         systemctl daemon-reload && systemctl enable mongod@27017.service )
     chown -R mongod:mongod ${APPDIR}/mongodb
+    test $? -eq 0 && fb s "Mongod Server Done." || fb e "Mongod Server Failed."
 }
 
-SSR(){
+ssr(){
     local libsodium='libsodium-1.0.18.tar.gz'
     local master='shadowsocks-master.zip'
     local sspwd=$(whiptail --title "Shadowsocks Passwd" --passwordbox "Specify an passwd"\
@@ -284,32 +333,44 @@ EOF
         chkconfig shadowsocks on
         /etc/init.d/shadowsocks start
     fi
+    command -v ssserver && fb s "SSR Done." || fb e "SSR Failed."
 }
 
-# result color
-color::result(){
-    echo -e "\e[32m✔   " $1 "\e[m"
+firewall(){
+    systemctl stop firewalld
+    systemctl disable firewalld
+    yum -y update
+    yum -y install iptables-services
+    systemctl enable iptables.service
+    systemctl start iptables.service
+    {
+        iptables -R INPUT 4 -m state --state NEW -p tcp --dport ${ssh_port} -j ACCEPT
+        iptables -D INPUT 5
+        iptables -P INPUT DROP
+        service iptables save
+    }
 }
 
 main(){
-    config::hostname && color::result "Config Hostname Done."
-    config::sshd && color::result "Config Sshd Done."
-    new::sshkey && color::result "New Sshkey Done."
-    remove::hostapp && color::result "Remove hostapp Done."
-    remove::service  && color::result "Remove service of Baidu/Aliyun Cloud Done."
-    config::repo  && color::result "Config Repo Done."
-    append::rc  && color::result "Append Bashrc Done."
-    pre::package && color::result "Package yum Done."
-    new::goenv  && color::result "New GO env Done."
-    new::iptables && color::result "Firewall Done."
-    new::mysql && color::result "MySQL 5.7 Done."
-    new::nginx && color::result "Nginx Done."
-    new::prometheus && color::result "Prometheus Done."
-    new::alertmanager && color::result "Alertmanager Done."
-    new::node && color::result "Node Exporter Done."
-    new::redis && color::result "Redis Done."
-    new::mongod && color::result "Mongodb Done."
-    SSR && color::result "SSR Done."
+    test ! -z $hn_f && host_name
+    test ! -z $spp_f && ssh_port_pass
+    test ! -z $sk_f && ssh_key
+    test ! -z $ha_f && host_app
+    test ! -z $ms_f && mirrors
+    test ! -z $vbr_f && vim_bash_rc
+    test ! -z $g_f && golang
+    test ! -z $ml_f && mysql
+    test ! -z $nx_f && nginx
+    test ! -z $nm_f && nvm
+    test ! -z $js_f && jenkins
+    test ! -z $ga_f && grafana
+    test ! -z $ps_f && prometheus
+    test ! -z $ar_f && alertmanager
+    test ! -z $ne_f && node
+    test ! -z $rs_f && redis
+    test ! -z $md_f && mongod
+    test ! -z $sr_f && ssr
+    test ! -z $ie_f && iptable
 }
 
 main "$@"
